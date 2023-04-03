@@ -38,8 +38,11 @@ struct mon_proc {
 static struct my_device_data {
 	struct cdev cdev;
 	/* TODO 1: add timer */
+    struct timer_list timer;
 	/* TODO 2: add flag */
+    int flag;
 	/* TODO 3: add work */
+    struct work_struct work;
 	/* TODO 4: add list for monitored processes */
 	/* TODO 4: add spinlock to protect list */
 } dev;
@@ -74,20 +77,29 @@ static struct mon_proc *get_proc(pid_t pid)
 
 
 /* TODO 3: define work handler */
+static void work_handler(struct work_struct *work)
+{
+	alloc_io();
+}
 
 #define ALLOC_IO_DIRECT
 /* TODO 3: undef ALLOC_IO_DIRECT*/
-
+#undef ALLOC_IO_DIRECT
 static void timer_handler(struct timer_list *tl)
 {
 	/* TODO 1: implement timer handler */
-	/* TODO 2: check flags: TIMER_TYPE_SET or TIMER_TYPE_ALLOC */
+	struct my_device_data *data = from_timer(data, tl, timer);
+    /* TODO 2: check flags: TIMER_TYPE_SET or TIMER_TYPE_ALLOC */
+    if (data->flag == TIMER_TYPE_SET || data->flag == TIMER_TYPE_ALLOC) {
+    
 		/* TODO 3: schedule work */
 		/* TODO 4: iterate the list and check the proccess state */
 			/* TODO 4: if task is dead print info ... */
 			/* TODO 4: ... decrement task usage counter ... */
 			/* TODO 4: ... remove it from the list ... */
 			/* TODO 4: ... free the struct mon_proc */
+
+    }
 }
 
 static int deferred_open(struct inode *inode, struct file *file)
@@ -114,14 +126,19 @@ static long deferred_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 	switch (cmd) {
 		case MY_IOCTL_TIMER_SET:
 			/* TODO 2: set flag */
+            my_data->flag = TIMER_TYPE_SET;
 			/* TODO 1: schedule timer */
-			break;
+			mod_timer(&my_data->timer, jiffies + arg * HZ);
+            break;
 		case MY_IOCTL_TIMER_CANCEL:
 			/* TODO 1: cancel timer */
-			break;
+			del_timer(&my_data->timer);
+            break;
 		case MY_IOCTL_TIMER_ALLOC:
 			/* TODO 2: set flag and schedule timer */
-			break;
+			my_data->flag = TIMER_TYPE_ALLOC;
+			mod_timer(&my_data->timer, jiffies + arg * HZ);
+            break;
 		case MY_IOCTL_TIMER_MON:
 		{
 			/* TODO 4: use get_proc() and add task to list */
@@ -155,15 +172,16 @@ static int deferred_init(void)
 	}
 
 	/* TODO 2: Initialize flag. */
+    dev.flag = TIMER_TYPE_NONE;
 	/* TODO 3: Initialize work. */
-
+    INIT_WORK(&dev.work, work_handler);
 	/* TODO 4: Initialize lock and list. */
 
 	cdev_init(&dev.cdev, &my_fops);
 	cdev_add(&dev.cdev, MKDEV(MY_MAJOR, MY_MINOR), 1);
 
 	/* TODO 1: Initialize timer. */
-
+    timer_setup(&dev.timer, timer_handler, 0);
 	return 0;
 }
 
@@ -177,8 +195,9 @@ static void deferred_exit(void)
 	unregister_chrdev_region(MKDEV(MY_MAJOR, MY_MINOR), 1);
 
 	/* TODO 1: Cleanup: make sure the timer is not running after exiting. */
-	/* TODO 3: Cleanup: make sure the work handler is not scheduled. */
-
+	del_timer_sync(&dev.timer);
+    /* TODO 3: Cleanup: make sure the work handler is not scheduled. */
+     flush_scheduled_work();
 	/* TODO 4: Cleanup the monitered process list */
 		/* TODO 4: ... decrement task usage counter ... */
 		/* TODO 4: ... remove it from the list ... */

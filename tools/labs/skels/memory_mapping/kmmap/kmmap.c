@@ -54,9 +54,16 @@ static int my_read(struct file *file, char __user *user_buffer,
 		size_t size, loff_t *offset)
 {
 	/* TODO 2: check size doesn't exceed our mapped area size */
-
+    unsigned long ret;
+    size_t mapped_size = NPAGES * PAGE_SIZE;
+    if (size > mapped_size)
+        size = mapped_size;
 	/* TODO 2: copy from mapped area to user buffer */
-
+    ret = copy_to_user(user_buffer, kmalloc_area, size);
+    if (ret) {
+        pr_err("Copy to user failed\n");
+        return -EFAULT;
+    }
 	return size;
 }
 
@@ -64,9 +71,16 @@ static int my_write(struct file *file, const char __user *user_buffer,
 		size_t size, loff_t *offset)
 {
 	/* TODO 2: check size doesn't exceed our mapped area size */
-
+    unsigned long ret;
+    size_t mapped_size = NPAGES * PAGE_SIZE;
+    if (size > mapped_size)
+        size = mapped_size;
 	/* TODO 2: copy from user buffer to mapped area */
-
+    ret = copy_from_user(kmalloc_area, user_buffer, size);
+    if (ret) {
+        pr_err("Copy from user failed\n");
+        return -EFAULT;
+    }
 	return size;
 }
 
@@ -153,11 +167,11 @@ static int __init my_init(void)
     kmalloc_area = (char *) PAGE_ALIGN((uintptr_t)kmalloc_ptr);
 	
     /* TODO 1: mark pages as reserved */
-    for (i = 0; i < (NPAGES + 2) * PAGE_SIZE; i += PAGE_SIZE)
+    for (i = 0; i < NPAGES * PAGE_SIZE; i += PAGE_SIZE)
         SetPageReserved(virt_to_page(((unsigned long)kmalloc_area) + i));
 	
     /* TODO 1: write data in each page */
-    for (i = 0; i < (NPAGES + 2) * PAGE_SIZE; i += PAGE_SIZE) {
+    for (i = 0; i < NPAGES  * PAGE_SIZE; i += PAGE_SIZE) {
 		kmalloc_area[i] = 0xaa;
 		kmalloc_area[i + 1] = 0xbb;
 		kmalloc_area[i + 2] = 0xcc;
@@ -193,7 +207,8 @@ static void __exit my_exit(void)
 	/* TODO 1: clear reservation on pages and free mem. */
     for (i = 0; i < (NPAGES + 2) * PAGE_SIZE; i += PAGE_SIZE)
         ClearPageReserved(virt_to_page(((unsigned long) kmalloc_area) + i));
-	unregister_chrdev_region(MKDEV(MY_MAJOR, 0), 1);
+	
+    unregister_chrdev_region(MKDEV(MY_MAJOR, 0), 1);
 	/* TODO 3: remove proc entry */
 }
 
